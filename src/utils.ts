@@ -1,5 +1,5 @@
 import { type SQSClient, SendMessageBatchCommand, type SendMessageBatchRequestEntry } from '@aws-sdk/client-sqs'
-import { type BulkEnqueueOptions, type BulkEnqueueResult, type Json } from './types'
+import { type MessageInStream, type BulkEnqueueOptions, type BulkEnqueueResult, type Json } from './types'
 import { randomUUID } from 'crypto'
 
 const REGION: string = process.env.AWS_REGION ?? process.env.AWS_DEFAULT_REGION ?? 'us-east-1'
@@ -27,15 +27,35 @@ function * getConcurrentBatch (records: Json[], batchSize = 10, concurrency = 10
   }
 }
 
-function * getEntries (records: Json[], options: BulkEnqueueOptions = {}, batchSize = 10): Generator<SendMessageBatchRequestEntry[]> {
+function * getEntriesIterator (records: Json[], options: BulkEnqueueOptions = {}, batchSize = 10): Generator<SendMessageBatchRequestEntry[]> {
   const idPrefix = randomUUID({ disableEntropyCache: true }) + '__'
 
   for (let i = 0; i < records.length; i += batchSize) {
     yield records.slice(i, i + batchSize)
       .map((item, index) =>
-        Object.assign({}, options, { Id: `${idPrefix}${i + index}`, MessageBody: JSON.stringify(item) })
+        Object.assign({}, options, { Id: `${idPrefix}${i + index}`, MessageBody: stringify(item) })
       )
   }
+}
+
+function getEntries (records: Array<MessageInStream | Json>, options: BulkEnqueueOptions = {}): SendMessageBatchRequestEntry[] {
+  return records.map((item: MessageInStream | Json, index) => {
+    const {
+      Body,
+      MessageBody,
+      DelaySeconds,
+      MessageAttributes,
+      MessageSystemAttributes,
+      MessageDeduplicationId,
+      MessageGroupId
+    }: MessageInStream = (item !== null && typeof item === 'object' && !Array.isArray(item)) ? item : {}
+    const message: SendMessageBatchRequestEntry = {
+      Id: `${index}`,
+      MessageBody: Body ?? MessageBody ?? stringify(item)
+    }
+    console.log(message)
+    return Object.assign({}, options, { DelaySeconds, MessageAttributes, MessageSystemAttributes, MessageDeduplicationId, MessageGroupId }, message)
+  })
 }
 
 const processConcurrentBatches = async (batches: SendMessageBatchRequestEntry[][], sqsClient: SQSClient, queueUrl: string): Promise<BulkEnqueueResult> => {
@@ -57,6 +77,8 @@ const processConcurrentBatches = async (batches: SendMessageBatchRequestEntry[][
   return result
 }
 
+const stringify = (val: any): string => (val !== null && typeof val === 'object') ? JSON.stringify(val) : String(val)
+
 const sleep = async (ms: number): Promise<number> => await new Promise((resolve) => setTimeout(resolve, ms))
 
-export { REGION, getBatch, getConcurrentBatch, getEntries, processConcurrentBatches, sleep }
+export { REGION, getBatch, getConcurrentBatch, getEntriesIterator, processConcurrentBatches, sleep, getEntries, stringify }

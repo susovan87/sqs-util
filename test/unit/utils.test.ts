@@ -1,4 +1,4 @@
-import { REGION, getBatch, getConcurrentBatch, getEntries } from '../../src/utils'
+import { REGION, getBatch, getConcurrentBatch, getEntries, getEntriesIterator } from '../../src/utils'
 import { type SendMessageBatchRequestEntry } from '@aws-sdk/client-sqs'
 import { expect } from 'chai'
 
@@ -43,18 +43,32 @@ describe('Utils', function () {
     })
   })
 
-  describe('getEntries', () => {
+  describe('getEntriesIterator', () => {
     const validateEntries = (entries: SendMessageBatchRequestEntry[], messages: string[]): void => {
-      entries?.forEach(entry => expect(entry.MessageBody).to.deep.equal(entry.Id?.split('__')[1]))
-      expect(entries?.map(entry => entry.MessageBody)).to.deep.equal(messages)
+      entries?.forEach((entry, i) => {
+        expect(entry.MessageBody).to.equal(messages[i])
+        expect(Number(entry.Id?.split('__')[1]) % 3).to.equal(i)
+      })
     }
     it('Should return SQS entries with 3 messages', () => {
-      const batchGen = getEntries([...Array(10).keys()], {}, 3)
-      validateEntries(batchGen.next().value, ['0', '1', '2'])
-      validateEntries(batchGen.next().value, ['3', '4', '5'])
-      validateEntries(batchGen.next().value, ['6', '7', '8'])
-      validateEntries(batchGen.next().value, ['9'])
+      const batchGen = getEntriesIterator(['string', true, false, 10, 10.123, { key: 'value' }, ['string', false, 10, 10.123, { key: 'value' }]], {}, 3)
+      validateEntries(batchGen.next().value, ['string', 'true', 'false'])
+      validateEntries(batchGen.next().value, ['10', '10.123', '{"key":"value"}'])
+      validateEntries(batchGen.next().value, ['["string",false,10,10.123,{"key":"value"}]'])
       expect(batchGen.next()).to.deep.equal({ value: undefined, done: true })
+    })
+  })
+
+  describe('getEntries', () => {
+    const validateEntries = (entries: SendMessageBatchRequestEntry[], messages: string[]): void => {
+      entries?.forEach((entry, i) => {
+        expect(entry.Id).to.equal(String(i))
+        expect(entry.MessageBody).to.equal(messages[i])
+      })
+    }
+    it('When passed message values', () => {
+      const batchGen = getEntries(['string', true, false, 10, 10.123, { key: 'value' }, ['string', false, 10, 10.123, { key: 'value' }]], {})
+      validateEntries(batchGen, ['string', 'true', 'false', '10', '10.123', '{"key":"value"}', '["string",false,10,10.123,{"key":"value"}]'])
     })
   })
 })

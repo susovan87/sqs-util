@@ -1,6 +1,6 @@
 import {
   type SendMessageRequest, type ReceiveMessageRequest, type CreateQueueRequest, type ReceiveMessageResult,
-  type SendMessageBatchRequestEntry, type BatchResultErrorEntry
+  type SendMessageBatchRequestEntry, type BatchResultErrorEntry, type Message
 } from '@aws-sdk/client-sqs'
 
 export type QueueOptions = Omit<SendMessageRequest, 'QueueUrl' | 'MessageBody' | 'MessageDeduplicationId'>
@@ -32,13 +32,4 @@ export interface DequeueReturnType extends ReceiveMessageResult {
 
 export type Json = null | string | number | boolean | Json[] | { [name: string]: Json }
 
-// export type JSONValue =
-//     | string
-//     | number
-//     | boolean
-//     | JSONObject
-//     | JSONArray
-
-// export type JSONObject = Record<string, JSONValue>
-
-// export interface JSONArray extends Array<JSONValue> { }
+export type MessageInStream = Pick<Message, 'Body' | 'Attributes'> & Partial<SendMessageBatchRequestEntry>
